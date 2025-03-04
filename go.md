@@ -915,8 +915,7 @@ Prometheus+Grafana实现指标观测
 ```shell
 Golang的官网下载地址：<https://golang.org/dl/>
 下载golang代码解压放至 /usr/local/go
-然后按照图示在$USER目录下 .bashrc中添加以下内容即可![](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250303170124617.png)
-```
+然后按照图示在$USER目录下 .bashrc中添加以下内容即可
 
 ![](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250303170124617.png)
 
