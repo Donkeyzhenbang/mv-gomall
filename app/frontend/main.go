@@ -95,7 +95,7 @@ func main() {
 	})
 	h.GET("/redirect", func(ctx context.Context, c *app.RequestContext) {
 		c.HTML(consts.StatusOK, "about", utils.H{
-			"title": "Error",
+			// "title": "Error",
 		})
 	})
 	if os.Getenv("GO_ENV") != "online" {

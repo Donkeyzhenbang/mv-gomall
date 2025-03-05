@@ -1,3 +1,242 @@
+# GoMall
+
+## 功能需求
+
+#### （一）注册中心集成
+
+1. 服务注册与发现
+   1. 该服务能够与注册中心（如 Consul、Nacos 、etcd 等）进行集成，自动注册服务数据。
+
+#### （二）身份认证
+
+1. 登录认证
+   1. 可以使用第三方现成的登录验证框架（CasBin、Satoken等），对请求进行身份验证
+   2. 可配置的认证白名单，对于某些不需要认证的接口或路径，允许直接访问
+   3. 可配置的黑名单，对于某些异常的用户，直接进行封禁处理（可选）
+2. 权限认证（高级）
+   1. 根据用户的角色和权限，对请求进行授权检查，确保只有具有相应权限的用户能够访问特定的服务或接口。
+   2. 支持正则表达模式的权限匹配（加分项）
+   3. 支持动态更新用户权限信息，当用户权限发生变化时，权限校验能够实时生效。
+
+#### （三）可观测要求
+
+1. 日志记录与监控
+   1. 对服务的运行状态和请求处理过程进行详细的日志记录，方便故障排查和性能分析。
+   2. 提供实时监控功能，能够及时发现和解决系统中的问题。
+
+#### （四）可靠性要求（高级）
+
+1. 容错机制
+   1. 该服务应具备一定的容错能力，当出现部分下游服务不可用或网络故障时，能够自动切换到备用服务或进行降级处理。
+   2. 保证下游在异常情况下，系统的整体可用性不会受太大影响，且核心服务可用。
+   3. 服务应该具有一定的流量兜底措施，在服务流量激增时，应该给予一定的限流措施。
+
+## 前端界面
+
+前端界面有CloudWeGo提供，没有前端美化需求无需修改。
+
+```sh
+go mod tidy #先安装对应依赖
+```
+
+## 通知服务
+
+异步处理消息/事件，对系统有一个很好的解耦，保证响应速度；使用中间件构建通知服务
+
+消息中间件：Message queue；Message scheme；Notification
+
+![image-20250304154028648](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250304154028648.png)
+
+```sh
+go get github.com/nats-io/nats.go/ #go client安装nats golang sdk
+```
+
+开发流程类似，都是先定义好IDL文件，利用cwgo生成相对应的服务，然后利用生成好的框架编写对应的业务逻辑，编写好对应Init函数，在main.go中调用即可
+
+## 可观测要求
+
+![image-20250304153808022](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250304153808022.png)
+
+Prometheus+Grafana实现指标观测
+
+使用 OpenTelemetry 进行 链路追踪（trace） 和日志（Log）打点和输出
+
+## 云服务器部署
+
+本次部署在阿里云服务器进行部署
+
+### Go编译运行环境配置
+
+```shell
+Golang的官网下载地址：<https://golang.org/dl/>
+下载golang代码解压放至 /usr/local/go
+然后按照图示在$USER目录下 .bashrc中添加以下内容即可
+```
+
+![](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250303170124617.png)
+
+```go
+// 在主文件中必须引入main的包
+package main
+ 
+import "fmt"
+ 
+//通过找到该main()方法进行执行程序
+func main() {
+        fmt.Printf("Golang env Test-2025-01-09!\\n")
+}          
+```
+
+### 项目启动
+
+```sh
+make init #拷贝运行环境文件
+make tidy #拉取go相关依赖
+sudo apt install docker-compose
+```
+
+- 本次项目为Herts框架，可以新建一个工程感受一下，类似Django启动
+- linux下配置好Golang环境，本次项目建议go1.22
+- 还需要安装air；mysql；docker-compose
+- open是Macos系统调用可以export GOPROXY=https://goproxy.cn,direct打开网页，linux换成xdg-open即可
+- 重点 `make run` 的时候我们要先启动前端页面，再启动后端数据库相关服务，比如order/product等等
+- 关于make tidy时候报错：一方面是网络代理问题，使用下面这句话解决即可，另一方面可能是之前缓存没清理干净，及时清理缓存再链接下载相关包
+
+```bash
+export GOPROXY=https://goproxy.cn,direct
+go clean -modcache
+```
+
+![image-20250303171902274](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250303171902274.png)
+
+云服务器无法启动docker守护进程
+
+```sh
+sudo chmod 666 /var/run/docker.sock # /var/run/docker.sock 权限不对，会导致非 root 用户无法访问
+export DOCKER_HOST=unix:///var/run/docker.sock #确保 Docker Daemon 在监听正确的 Socket
+
+#当前用户组加入docker
+sudo usermod -aG docker $USER
+newgrp docker  # 让用户组变更立即生效
+```
+
+```sh
+sudo mkdir -p /etc/docker
+sudo nano /etc/docker/daemon.json
+
+{
+  "registry-mirrors": ["https://mirror.ccs.tencentyun.com"]
+}
+
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+
+
+安装air
+
+```sh
+go install github.com/cosmtrek/air@v1.50
+然后把 $GOPATH/bin 加入环境变量,这里需要注意我们需要提前在bashrc中声明GOPATH：
+export PATH=$PATH:$(go env GOPATH)/bin
+永久生效（添加到 ~/.bashrc 或 ~/.profile）：
+
+source ~/.bashrc
+air -v
+```
+
+
+
+## 问题汇总
+
+### docker容器占用相关操作
+
+### docker启动异常
+
+直接启动`make env-start`如果本地安装mysql或者redis会出现报错，启动dockedr容器时候，会显示端口号被占用。解决办法可以是修改源码中的对应端口号或者是直接杀死本地的mysql和redis。
+
+```sh
+# 停止 MySQL 服务（systemd 会管理进程生命周期）
+sudo systemctl stop mysql
+
+# 确认状态（应显示 "inactive (dead)"）
+sudo systemctl status mysql
+
+# 禁用 MySQL 开机自启动
+sudo systemctl disable mysql
+
+# 通过 systemctl 停止 Redis 服务（如果通过包管理安装）
+sudo systemctl stop redis-server
+
+# 禁用 Redis 开机自启
+sudo systemctl disable redis-server
+
+# 查找所有 MySQL 相关进程
+sudo pgrep -f mysql
+
+# 强制杀死所有 MySQL 进程
+sudo pkill -9 -f mysql
+
+```
+
+**修改 Docker Compose 端口映射（可选）**
+
+如果仍需保留本地 Redis，可以修改 `docker-compose.yaml`，将 Redis 的宿主机端口改为其他值（例如 `6380:6379`）.为了从宿主机或外部访问容器内的服务，必须将容器端口映射到宿主机的端口。端口映射的格式通常是`宿主端口:容器端口`，也就是左边的端口是宿主机的，右边是容器内部的。在修改docker-compose.yml后，需要重新启动容器才能使新的端口映射生效。
+
+```yaml
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6380:6379"  # 修改左侧的宿主机端口
+```
+
+**清理 Docker 残留**：如果多次启动失败，先清理旧容器：
+
+```bash
+docker-compose down
+```
+
+### conventional commit
+
+安装cz工具
+
+```sh
+npm install -g commitizen cz-conventional-changelog
+npm ls -g -depth=0
+echo '{ "path": "cz-conventional-changelog" }' > ~/.czrc
+npm install -g @commitlint/cli @commitlint/config-conventional # 校验规范的l
+```
+
+这里我们需要先安装nvm npm以及升级nodejs
+
+```sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
+nvm install 16   # 安装 Node.js 16.x（或更高版本）
+nvm use 16       # 切换到 Node.js 16.x
+node -v   # 确保版本为 14.17 或更高
+npm install -g typescript
+source ~/.bashrc #记得及时source使得环境变量生效demo
+```
+
+### 无法完成注册
+
+注意`./app/frontend/.env`文件中一定要添加SESSION_SELECT否则无法完成注册
+
+```
+SESSION_SECRET="ad0nkey"
+```
+
+### cvv格式报错
+
+注意一下订单输入的格式
+
+### 启动user数据库无法连接
+
+没有预先写好.env文件
+
+
 # CloudWeGo基础
 
 
@@ -875,237 +1114,4 @@ ETCD 保证 **强一致性**，意味着在 ETCD 集群中的所有读取操作�
 
 
 
-# GoMall
-
-## 功能需求
-
-#### （一）注册中心集成
-
-1. 服务注册与发现
-   1. 该服务能够与注册中心（如 Consul、Nacos 、etcd 等）进行集成，自动注册服务数据。
-
-#### （二）身份认证
-
-1. 登录认证
-   1. 可以使用第三方现成的登录验证框架（CasBin、Satoken等），对请求进行身份验证
-   2. 可配置的认证白名单，对于某些不需要认证的接口或路径，允许直接访问
-   3. 可配置的黑名单，对于某些异常的用户，直接进行封禁处理（可选）
-2. 权限认证（高级）
-   1. 根据用户的角色和权限，对请求进行授权检查，确保只有具有相应权限的用户能够访问特定的服务或接口。
-   2. 支持正则表达模式的权限匹配（加分项）
-   3. 支持动态更新用户权限信息，当用户权限发生变化时，权限校验能够实时生效。
-
-#### （三）可观测要求
-
-1. 日志记录与监控
-   1. 对服务的运行状态和请求处理过程进行详细的日志记录，方便故障排查和性能分析。
-   2. 提供实时监控功能，能够及时发现和解决系统中的问题。
-
-#### （四）可靠性要求（高级）
-
-1. 容错机制
-   1. 该服务应具备一定的容错能力，当出现部分下游服务不可用或网络故障时，能够自动切换到备用服务或进行降级处理。
-   2. 保证下游在异常情况下，系统的整体可用性不会受太大影响，且核心服务可用。
-   3. 服务应该具有一定的流量兜底措施，在服务流量激增时，应该给予一定的限流措施。
-
-## 前端界面
-
-前端界面有CloudWeGo提供，没有前端美化需求无需修改。
-
-```sh
-go mod tidy #先安装对应依赖
-```
-
-## 通知服务
-
-异步处理消息/事件，对系统有一个很好的解耦，保证响应速度；使用中间件构建通知服务
-
-消息中间件：Message queue；Message scheme；Notification
-
-![image-20250304154028648](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250304154028648.png)
-
-```sh
-go get github.com/nats-io/nats.go/ #go client安装nats golang sdk
-```
-
-开发流程类似，都是先定义好IDL文件，利用cwgo生成相对应的服务，然后利用生成好的框架编写对应的业务逻辑，编写好对应Init函数，在main.go中调用即可
-
-## 可观测要求
-
-![image-20250304153808022](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250304153808022.png)
-
-Prometheus+Grafana实现指标观测
-
-使用 OpenTelemetry 进行 链路追踪（trace） 和日志（Log）打点和输出
-
-## 云服务器部署
-
-本次部署在阿里云服务器进行部署
-
-### Go编译运行环境配置
-
-```shell
-Golang的官网下载地址：<https://golang.org/dl/>
-下载golang代码解压放至 /usr/local/go
-然后按照图示在$USER目录下 .bashrc中添加以下内容即可
-```
-
-![](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250303170124617.png)
-
-```go
-// 在主文件中必须引入main的包
-package main
- 
-import "fmt"
- 
-//通过找到该main()方法进行执行程序
-func main() {
-        fmt.Printf("Golang env Test-2025-01-09!\\n")
-}          
-```
-
-### 项目启动
-
-```sh
-make init #拷贝运行环境文件
-make tidy #拉取go相关依赖
-sudo apt install docker-compose
-```
-
-- 本次项目为Herts框架，可以新建一个工程感受一下，类似Django启动
-- linux下配置好Golang环境，本次项目建议go1.22
-- 还需要安装air；mysql；docker-compose
-- open是Macos系统调用可以export GOPROXY=https://goproxy.cn,direct打开网页，linux换成xdg-open即可
-- 重点 `make run` 的时候我们要先启动前端页面，再启动后端数据库相关服务，比如order/product等等
-- 关于make tidy时候报错：一方面是网络代理问题，使用下面这句话解决即可，另一方面可能是之前缓存没清理干净，及时清理缓存再链接下载相关包
-
-```bash
-export GOPROXY=https://goproxy.cn,direct
-go clean -modcache
-```
-
-![image-20250303171902274](https://adonkey.oss-cn-beijing.aliyuncs.com/picgo/image-20250303171902274.png)
-
-云服务器无法启动docker守护进程
-
-```sh
-sudo chmod 666 /var/run/docker.sock # /var/run/docker.sock 权限不对，会导致非 root 用户无法访问
-export DOCKER_HOST=unix:///var/run/docker.sock #确保 Docker Daemon 在监听正确的 Socket
-
-#当前用户组加入docker
-sudo usermod -aG docker $USER
-newgrp docker  # 让用户组变更立即生效
-```
-
-```sh
-sudo mkdir -p /etc/docker
-sudo nano /etc/docker/daemon.json
-
-{
-  "registry-mirrors": ["https://mirror.ccs.tencentyun.com"]
-}
-
-sudo systemctl daemon-reload
-sudo systemctl restart docker
-```
-
-
-
-安装air
-
-```sh
-go install github.com/cosmtrek/air@v1.50
-然后把 $GOPATH/bin 加入环境变量,这里需要注意我们需要提前在bashrc中声明GOPATH：
-export PATH=$PATH:$(go env GOPATH)/bin
-永久生效（添加到 ~/.bashrc 或 ~/.profile）：
-
-source ~/.bashrc
-air -v
-```
-
-
-
-## 问题汇总
-
-### docker容器占用相关操作
-
-### docker启动异常
-
-直接启动`make env-start`如果本地安装mysql或者redis会出现报错，启动dockedr容器时候，会显示端口号被占用。解决办法可以是修改源码中的对应端口号或者是直接杀死本地的mysql和redis。
-
-```sh
-# 停止 MySQL 服务（systemd 会管理进程生命周期）
-sudo systemctl stop mysql
-
-# 确认状态（应显示 "inactive (dead)"）
-sudo systemctl status mysql
-
-# 禁用 MySQL 开机自启动
-sudo systemctl disable mysql
-
-# 通过 systemctl 停止 Redis 服务（如果通过包管理安装）
-sudo systemctl stop redis-server
-
-# 禁用 Redis 开机自启
-sudo systemctl disable redis-server
-
-# 查找所有 MySQL 相关进程
-sudo pgrep -f mysql
-
-# 强制杀死所有 MySQL 进程
-sudo pkill -9 -f mysql
-
-```
-
-**修改 Docker Compose 端口映射（可选）**
-
-如果仍需保留本地 Redis，可以修改 `docker-compose.yaml`，将 Redis 的宿主机端口改为其他值（例如 `6380:6379`）.为了从宿主机或外部访问容器内的服务，必须将容器端口映射到宿主机的端口。端口映射的格式通常是`宿主端口:容器端口`，也就是左边的端口是宿主机的，右边是容器内部的。在修改docker-compose.yml后，需要重新启动容器才能使新的端口映射生效。
-
-```yaml
-services:
-  redis:
-    image: redis:alpine
-    ports:
-      - "6380:6379"  # 修改左侧的宿主机端口
-```
-
-**清理 Docker 残留**：如果多次启动失败，先清理旧容器：
-
-```bash
-docker-compose down
-```
-
-### conventional commit
-
-安装cz工具
-
-```sh
-npm install -g commitizen cz-conventional-changelog
-npm ls -g -depth=0
-echo '{ "path": "cz-conventional-changelog" }' > ~/.czrc
-npm install -g @commitlint/cli @commitlint/config-conventional # 校验规范的l
-```
-
-这里我们需要先安装nvm npm以及升级nodejs
-
-```sh
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
-nvm install 16   # 安装 Node.js 16.x（或更高版本）
-nvm use 16       # 切换到 Node.js 16.x
-node -v   # 确保版本为 14.17 或更高
-npm install -g typescript
-source ~/.bashrc #记得及时source使得环境变量生效demo
-```
-
-### 无法完成注册
-
-注意`./app/frontend/.env`文件中一定要添加SESSION_SELECT否则无法完成注册
-
-```
-SESSION_SECRET="ad0nkey"
-```
-
-### cvv格式报错
-
-注意一下订单输入的格式
 
